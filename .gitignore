@@ -1,0 +1,6 @@
+# binaries
+azdo-vault
+
+# generated shell completions
+*.bash
+_azdo-vault
