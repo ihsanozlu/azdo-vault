@@ -54,6 +54,12 @@ cd azdo-vault
 go build -o azdo-vault
 ```
 
+### Homebrew (macOS & Linux)
+
+```bash
+brew tap ihsanozlu/azdo-vault
+brew install azdo-vault
+```
 ---
 
 ## Prerequisites
@@ -80,13 +86,13 @@ Before using the CLI, configure your Azure DevOps organizations.
 ```bash
 azdo-vault configure add \
   --name SOURCE_ORGANIZATION_ALIAS \
-  --org YOUR_AZURE_DEVOPS_ORGANİZATİON_NAME
+  --org YOUR_AZURE_DEVOPS_ORGANIZATION_NAME
 ```
 
 This maps:
 
 ```
-SOURCE_ORGANIZATION_ALIAS -> https://dev.azure.com/{YOUR_AZURE_DEVOPS_ORGANİZATİON_NAME}
+SOURCE_ORGANIZATION_ALIAS -> https://dev.azure.com/{YOUR_AZURE_DEVOPS_ORGANIZATION_NAME}
 ```
 
 ### Set default organization
