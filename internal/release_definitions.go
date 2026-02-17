@@ -257,6 +257,8 @@ func RestoreReleaseDefinitionsFromBackup(
 		}
 
 		payload := sanitizeReleaseDefinitionForCreate(full)
+		
+		ensureStageRetentionPolicy(payload, 30, 3, true)
 
 		targetQName, targetQID, qerr := remapReleaseQueues(
 			payload,
@@ -341,11 +343,11 @@ func toVSRMBase(orgURL string) string {
 
 // Azure DevOps release definition POST wants variableGroups as objects: [{ "id": 15 }]
 func setReleaseVariableGroups(payload map[string]any, ids []int) {
-	out := make([]any, 0, len(ids))
-	for _, id := range ids {
-		out = append(out, map[string]any{"id": id})
-	}
-	payload["variableGroups"] = out
+	// out := make([]any, 0, len(ids))
+	// for _, id := range ids {
+	// 	out = append(out, map[string]any{"id": id})
+	// }
+	payload["variableGroups"] = ids
 }
 
 func readVarGroupIDAny(v any) int {
@@ -375,24 +377,65 @@ func RemapReleaseDefinitionRefsByName(
 	srcTaskGroupIDToName map[string]string,
 	tgtTaskGroupNameToID map[string]string,
 ) {
+// ReleaseDefinition.variableGroups is int[] (or may come expanded). We remap by name.
 	if vgs, ok := payload["variableGroups"].([]any); ok {
 		outIDs := make([]int, 0, len(vgs))
+
 		for _, x := range vgs {
 			srcID := readVarGroupIDAny(x)
 			if srcID == 0 {
 				continue
 			}
-			if name, ok := srcVarGroupIDToName[srcID]; ok {
-				if newID, ok := tgtVarGroupNameToID[name]; ok {
-					outIDs = append(outIDs, newID)
-					continue
-				}
+
+			name, ok := srcVarGroupIDToName[srcID]
+			if !ok || strings.TrimSpace(name) == "" {
+				continue
 			}
-			outIDs = append(outIDs, srcID)
+
+			if newID, ok := tgtVarGroupNameToID[strings.ToLower(name)]; ok && newID != 0 {
+				outIDs = append(outIDs, newID)
+			} else {
+				// IMPORTANT: do NOT keep source IDs in target payload
+				// (those IDs don't exist in target and can break create)
+				fmt.Printf("⚠ %s: pipeline variable group '%s' (src id=%d) not found in target; dropping\n",
+					fmt.Sprint(payload["name"]), name, srcID)
+			}
 		}
+
 		setReleaseVariableGroups(payload, outIDs)
 	}
+	// ReleaseDefinitionEnvironment.variableGroups is also int[] in the API
+	if envs, ok := payload["environments"].([]any); ok {
+		for _, e := range envs {
+			env, _ := e.(map[string]any)
+			if env == nil {
+				continue
+			}
+			if evgs, ok := env["variableGroups"].([]any); ok {
+				outIDs := make([]int, 0, len(evgs))
+				for _, x := range evgs {
+					srcID := readVarGroupIDAny(x)
+					if srcID == 0 {
+						continue
+					}
 
+					name, ok := srcVarGroupIDToName[srcID]
+					if !ok || strings.TrimSpace(name) == "" {
+						continue
+					}
+
+					if newID, ok := tgtVarGroupNameToID[strings.ToLower(name)]; ok && newID != 0 {
+						outIDs = append(outIDs, newID)
+					} else {
+						fmt.Printf("⚠ %s: stage variable group '%s' (src id=%d) not found in target; dropping\n",
+							fmt.Sprint(payload["name"]), name, srcID)
+					}
+				}
+				env["variableGroups"] = outIDs
+			}
+		}
+	}
+	
 	envs, _ := payload["environments"].([]any)
 	for _, e := range envs {
 		env, _ := e.(map[string]any)
@@ -536,4 +579,35 @@ func remapReleaseQueues(
 
 	setReleaseQueueID(payload, targetQID)
 	return targetQName, targetQID, nil
+}
+
+func ensureStageRetentionPolicy(payload map[string]any, daysToKeep, releasesToKeep int, retainBuild bool) {
+	envs, _ := payload["environments"].([]any)
+	for _, e := range envs {
+		env, _ := e.(map[string]any)
+		if env == nil {
+			continue
+		}
+
+		rp, ok := env["retentionPolicy"].(map[string]any)
+		if !ok || rp == nil {
+			env["retentionPolicy"] = map[string]any{
+				"daysToKeep":     daysToKeep,
+				"releasesToKeep": releasesToKeep,
+				"retainBuild":    retainBuild,
+			}
+			continue
+		}
+
+		// fill missing keys if partially present
+		if _, ok := rp["daysToKeep"]; !ok {
+			rp["daysToKeep"] = daysToKeep
+		}
+		if _, ok := rp["releasesToKeep"]; !ok {
+			rp["releasesToKeep"] = releasesToKeep
+		}
+		if _, ok := rp["retainBuild"]; !ok {
+			rp["retainBuild"] = retainBuild
+		}
+	}
 }

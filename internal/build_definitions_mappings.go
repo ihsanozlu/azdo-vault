@@ -62,7 +62,7 @@ func BuildVarGroupMaps(
 	tgtNameToID := map[string]int{}
 	for _, g := range tgt {
 		if g.Id != 0 && g.Name != "" {
-			tgtNameToID[g.Name] = g.Id
+			tgtNameToID[strings.ToLower(g.Name)] = g.Id
 		}
 	}
 
@@ -120,7 +120,8 @@ func RemapBuildDefinitionRefsByName(
 				continue
 			}
 			if name, ok := srcVarGroupIDToName[srcID]; ok {
-				if newID, ok := tgtVarGroupNameToID[name]; ok {
+				//if newID, ok := tgtVarGroupNameToID[name]; ok {
+				if newID, ok := tgtVarGroupNameToID[strings.ToLower(name)]; ok {
 					outIDs = append(outIDs, newID)
 					continue
 				}
