@@ -257,8 +257,12 @@ func RestoreReleaseDefinitionsFromBackup(
 		}
 
 		payload := sanitizeReleaseDefinitionForCreate(full)
-		
-		ensureStageRetentionPolicy(payload, 30, 3, true)
+
+		// ✅ Remap artifact project/repo/build ids FIRST (before post)
+		if err := RemapReleaseArtifacts(payload, targetOrgURL, targetProject, resourceGUID); err != nil {
+			fmt.Printf("⚠ Skipping release '%s': artifact remap failed: %s\n", name, err.Error())
+			continue
+		}
 
 		targetQName, targetQID, qerr := remapReleaseQueues(
 			payload,
@@ -289,6 +293,7 @@ func RestoreReleaseDefinitionsFromBackup(
 			fmt.Printf("⚠ Failed creating release definition '%s'.\n%s\n", name, err.Error())
 			continue
 		}
+
 	}
 
 	fmt.Println("✔ Release definitions restore finished")
@@ -377,7 +382,7 @@ func RemapReleaseDefinitionRefsByName(
 	srcTaskGroupIDToName map[string]string,
 	tgtTaskGroupNameToID map[string]string,
 ) {
-// ReleaseDefinition.variableGroups is int[] (or may come expanded). We remap by name.
+	// ReleaseDefinition.variableGroups is int[] (or may come expanded). We remap by name.
 	if vgs, ok := payload["variableGroups"].([]any); ok {
 		outIDs := make([]int, 0, len(vgs))
 
@@ -435,7 +440,7 @@ func RemapReleaseDefinitionRefsByName(
 			}
 		}
 	}
-	
+
 	envs, _ := payload["environments"].([]any)
 	for _, e := range envs {
 		env, _ := e.(map[string]any)
